@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: "fastapi-backend"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend_app:8000"]
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["prometheus_app:9090"]
+
+  - job_name: "grafana"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["grafana_app:3000"]
+
+  - job_name: "cadvisor"
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
