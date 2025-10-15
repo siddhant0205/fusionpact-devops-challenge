@@ -57,8 +57,8 @@ pipeline {
             steps {
                 sh '''
                 echo "Deploying containers on EC2..."
-                docker compose down || true
-                docker compose up -d
+                docker-compose down || true
+                docker-compose up -d
                 docker ps
                 '''
             }
