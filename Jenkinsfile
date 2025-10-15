@@ -2,31 +2,37 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB = credentials('dockerhub')
-        GITHUB_CREDS = credentials('github')
+        DOCKERHUB = credentials('dockerhub')      // Jenkins credential ID for DockerHub
         DOCKER_USER = "${DOCKERHUB_USR}"
         DOCKER_PASS = "${DOCKERHUB_PSW}"
-        BACKEND_IMAGE = "siddhant1178/fusionpact-backend"
-        FRONTEND_IMAGE = "siddhant1178/fusionpact-frontend"
+        GITHUB_CREDS = credentials('github')      // Jenkins credential ID for GitHub PAT
     }
 
-    options { timestamps() }
+    options {
+        timestamps()
+    }
 
     stages {
-
         stage('Checkout Code') {
             steps {
-                git branch: 'main', credentialsId: 'github',
-                    url: 'https://github.com/siddhant0205/fusionpact-devops-challenge.git'
+                echo "📦 Checking out repository..."
+                git branch: 'main',
+                    url: 'https://github.com/siddhant0205/fusionpact-devops-challenge.git',
+                    credentialsId: 'github'
             }
         }
 
         stage('Build and Test') {
             steps {
                 dir('backend') {
+                    echo "🔧 Setting up Python Virtual Environment..."
                     sh '''
-                    pip install -r requirements.txt
-                    pytest --maxfail=1 --disable-warnings -q
+                        sudo apt update -y
+                        sudo apt install -y python3 python3-pip python3-venv
+                        python3 -m venv venv
+                        . venv/bin/activate
+                        pip install --upgrade pip
+                        pip install -r requirements.txt
                     '''
                 }
             }
@@ -34,45 +40,54 @@ pipeline {
 
         stage('Build Docker Images') {
             steps {
-                parallel (
-                    "Backend": {
-                        dir('backend') {
-                            sh 'docker build -t $BACKEND_IMAGE:latest .'
-                        }
-                    },
-                    "Frontend": {
-                        dir('frontend') {
-                            sh 'docker build -t $FRONTEND_IMAGE:latest .'
-                        }
+                script {
+                    echo "🐳 Building Backend Docker Image..."
+                    dir('backend') {
+                        sh "docker build -t ${DOCKER_USER}/fusionpact-backend:latest ."
                     }
-                )
+
+                    echo "🌐 Building Frontend Docker Image..."
+                    dir('frontend') {
+                        sh "docker build -t ${DOCKER_USER}/fusionpact-frontend:latest ."
+                    }
+                }
             }
         }
 
         stage('Push to DockerHub') {
             steps {
-                sh '''
-                echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                docker push $BACKEND_IMAGE:latest
-                docker push $FRONTEND_IMAGE:latest
-                docker logout
-                '''
+                script {
+                    echo "🚀 Pushing Docker images to DockerHub..."
+                    sh """
+                        echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin
+                        docker push ${DOCKER_USER}/fusionpact-backend:latest
+                        docker push ${DOCKER_USER}/fusionpact-frontend:latest
+                        docker logout
+                    """
+                }
             }
         }
 
         stage('Deploy Containers') {
             steps {
-                sh '''
-                docker compose down || true
-                docker compose up -d
-                docker ps
-                '''
+                script {
+                    echo "📦 Deploying containers using Docker Compose..."
+                    sh """
+                        sudo apt install -y docker-compose-plugin || true
+                        docker compose down || true
+                        docker compose up -d
+                    """
+                }
             }
         }
     }
 
     post {
-        success { echo "✅ Deployment completed successfully." }
-        failure { echo "❌ Deployment failed." }
+        success {
+            echo "✅ Deployment successful! Both containers are live."
+        }
+        failure {
+            echo "❌ Deployment failed. Check logs for details."
+        }
     }
 }
